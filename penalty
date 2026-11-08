@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2-Player Penalty Shootout</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #1e272e;
+      color: white;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      user-select: none;
+    }
+    h1 { margin: 5px 0; font-size: 28px; letter-spacing: 1px; }
+    #scoreboard {
+      display: flex;
+      gap: 30px;
+      background: #2f3640;
+      padding: 10px 25px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      font-size: 20px;
+      font-weight: bold;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .p1-color { color: #ff4757; }
+    .p2-color { color: #1e90ff; }
+    canvas {
+      background: linear-gradient(to bottom, #3498db 0%, #87CEEB 38%, #2ecc71 38%, #27ae60 100%);
+      border: 4px solid #fff;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    #instructions {
+      margin-top: 12px;
+      text-align: center;
+      font-size: 16px;
+      background: #2f3640;
+      padding: 10px 20px;
+      border-radius: 8px;
+      max-width: 600px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      font-weight: bold;
+      background: #ffa502;
+      border: none;
+      border-radius: 6px;
+      color: #1e272e;
+      cursor: pointer;
+      display: none;
+    }
+    button:hover { background: #eccc68; }
+  </style>
+</head>
+<body>
+
+  <h1>⚽ PENALTY SHOOTOUT ⚽</h1>
+  
+  <div id="scoreboard">
+    <div class="p1-color">P1 (Red): <span id="p1-score">0</span></div>
+    <div>Round: <span id="round-num">1</span>/5</div>
+    <div class="p2-color">P2 (Blue): <span id="p2-score">0</span></div>
+  </div>
+
+  <canvas id="gameCanvas" width="700" height="450"></canvas>
+
+  <div id="instructions">
+    <span id="status-text">Player 1's Turn to Shoot! Press <b>SPACE</b> or <b>CLICK</b> to lock aim.</span>
+  </div>
+  
+  <button id="restart-btn" onclick="resetGame()">Play Again</button>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const statusText = document.getElementById('status-text');
+    const p1ScoreEl = document.getElementById('p1-score');
+    const p2ScoreEl = document.getElementById('p2-score');
+    const roundNumEl = document.getElementById('round-num');
+    const restartBtn = document.getElementById('restart-btn');
+
+    // Game State
+    let p1Score = 0;
+    let p2Score = 0;
+    let round = 1;
+    let turn = 1; // 1 = P1 shoots, 2 = P2 shoots
+    let phase = 'AIMING'; // AIMING, KEEPER_PICK, SHOOTING, RESULT, GAMEOVER
+
+    // Goal dimensions
+    const goal = { x: 175, y: 110, width: 350, height: 110 };
+
+    // Aiming arrow
+    let aimX = 350;
+    let aimDir = 5;
+
+    // Ball properties
+    let ball = { x: 350, y: 390, radius: 14, targetX: 350, targetY: 165, startX: 350, startY: 390, progress: 0 };
+
+    // Goalkeeper properties
+    let keeper = { x: 350, y: 185, width: 45, height: 65, targetX: 350, diveDir: 'CENTER' };
+
+    // Input Handling
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') handleAction();
+      if (phase === 'KEEPER_PICK') {
+        if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') lockKeeper('LEFT');
+        if (e.key === 's' || e.key === 'S' || e.key === 'ArrowDown') lockKeeper('CENTER');
+        if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') lockKeeper('RIGHT');
+      }
+    });
+
+    canvas.addEventListener('click', (e) => {
+      if (phase === 'AIMING') {
+        handleAction();
+      } else if (phase === 'KEEPER_PICK') {
+        const rect = canvas.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        if (clickX < 290) lockKeeper('LEFT');
+        else if (clickX > 410) lockKeeper('RIGHT');
+        else lockKeeper('CENTER');
+      }
+    });
+
+    function handleAction() {
+      if (phase === 'AIMING') {
+        ball.targetX = aimX;
+        ball.targetY = 140 + Math.random() * 60; // Slight vertical variation
+        phase = 'KEEPER_PICK';
+        const keeperPlayer = turn === 1 ? "Player 2" : "Player 1";
+        statusText.innerHTML = `🧤 <b>${keeperPlayer}</b> (Keeper): Press <b>A / S / D</b> (or Click Left/Middle/Right of goal) to dive!`;
+      }
+    }
+
+    function lockKeeper(direction) {
+      keeper.diveDir = direction;
+      if (direction === 'LEFT') keeper.targetX = 225;
+      if (direction === 'CENTER') keeper.targetX = 350;
+      if (direction === 'RIGHT') keeper.targetX = 475;
+      
+      phase = 'SHOOTING';
+      statusText.innerHTML = "Here comes the shot...";
+    }
+
+    function update() {
+      if (phase === 'AIMING') {
+        aimX += aimDir;
+        if (aimX > goal.x + goal.width - 15 || aimX < goal.x + 15) {
+          aimDir *= -1;
+        }
+      } 
+      else if (phase === 'SHOOTING') {
+        ball.progress += 0.045;
+        
+        // Move ball
+        ball.x = ball.startX + (ball.targetX - ball.startX) * ball.progress;
+        ball.y = ball.startY + (ball.targetY - ball.startY) * ball.progress;
+        ball.radius = 14 - (ball.progress * 5); // Shrink for 3D depth
+
+        // Move keeper
+        keeper.x += (keeper.targetX - keeper.x) * 0.12;
+
+        if (ball.progress >= 1) {
+          checkGoal();
+        }
+      }
+    }
+
+    function checkGoal() {
+      phase = 'RESULT';
+      // Check if keeper is close enough to block
+      const dist = Math.abs(ball.x - keeper.x);
+      const isSaved = dist < 48;
+
+      if (isSaved) {
+        statusText.innerHTML = "🧤 <b>WHAT A SAVE!</b> Blocked by the keeper!";
+      } else {
+        statusText.innerHTML = "⚽ <b>GOOOOOAL!</b> Top bins!";
+        if (turn === 1) p1Score++;
+        else p2Score++;
+      }
+
+      p1ScoreEl.innerText = p1Score;
+      p2ScoreEl.innerText = p2Score;
+
+      setTimeout(nextTurn, 2000);
+    }
+
+    function nextTurn() {
+      if (turn === 1) {
+        turn = 2;
+      } else {
+        // Check win conditions after both players shoot
+        if (round >= 5 && p1Score !== p2Score) {
+          endGame();
+          return;
+        }
+        turn = 1;
+        round++;
+        roundNumEl.innerText = round > 5 ? `${round} (Sudden Death)` : round;
+      }
+
+      // Reset positions
+      ball = { x: 350, y: 390, radius: 14, targetX: 350, targetY: 165, startX: 350, startY: 390, progress: 0 };
+      keeper.x = 350;
+      keeper.targetX = 350;
+      keeper.diveDir = 'CENTER';
+      phase = 'AIMING';
+
+      const shooter = turn === 1 ? "<span class='p1-color'>Player 1</span>" : "<span class='p2-color'>Player 2</span>";
+      statusText.innerHTML = `${shooter}'s Turn to Shoot! Press <b>SPACE</b> or <b>CLICK</b> to lock aim.`;
+    }
+
+    function endGame() {
+      phase = 'GAMEOVER';
+      const winner = p1Score > p2Score ? "🏆 PLAYER 1 WINS! 🏆" : "🏆 PLAYER 2 WINS! 🏆";
+      statusText.innerHTML = `<b>GAME OVER! ${winner}</b>`;
+      restartBtn.style.display = 'inline-block';
+    }
+
+    function resetGame() {
+      p1Score = 0; p2Score = 0; round = 1; turn = 1;
+      p1ScoreEl.innerText = 0; p2ScoreEl.innerText = 0; roundNumEl.innerText = 1;
+      restartBtn.style.display = 'none';
+      ball = { x: 350, y: 390, radius: 14, targetX: 350, targetY: 165, startX: 350, startY: 390, progress: 0 };
+      keeper.x = 350;
+      phase = 'AIMING';
+      statusText.innerHTML = "<span class='p1-color'>Player 1</span>'s Turn to Shoot! Press <b>SPACE</b> or <b>CLICK</b> to lock aim.";
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Pitch markings
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(100, 170, 500, 180); // Penalty box
+      ctx.beginPath();
+      ctx.arc(350, 390, 5, 0, Math.PI * 2); // Penalty spot
+      ctx.fillStyle = "white";
+      ctx.fill();
+
+      // Goal Net
+      ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+      
+      // Net grid lines
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
+      ctx.lineWidth = 1;
+      for (let i = goal.x; i <= goal.x + goal.width; i += 20) {
+        ctx.beginPath(); ctx.moveTo(i, goal.y); ctx.lineTo(i, goal.y + goal.height); ctx.stroke();
+      }
+      for (let j = goal.y; j <= goal.y + goal.height; j += 20) {
+        ctx.beginPath(); ctx.moveTo(goal.x, j); ctx.lineTo(goal.x + goal.width, j); ctx.stroke();
+      }
+
+      // Goalposts
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(goal.x, goal.y + goal.height);
+      ctx.lineTo(goal.x, goal.y);
+      ctx.lineTo(goal.x + goal.width, goal.y);
+      ctx.lineTo(goal.x + goal.width, goal.y + goal.height);
+      ctx.stroke();
+
+      // Draw Goalkeeper
+      ctx.save();
+      ctx.translate(keeper.x, keeper.y);
+      if (phase === 'SHOOTING' || phase === 'RESULT') {
+        if (keeper.diveDir === 'LEFT') ctx.rotate(-0.6);
+        if (keeper.diveDir === 'RIGHT') ctx.rotate(0.6);
+      }
+      // Keeper Body (opposite color of shooter)
+      ctx.fillStyle = turn === 1 ? "#1e90ff" : "#ff4757";
+      ctx.fillRect(-keeper.width / 2, -keeper.height / 2, keeper.width, keeper.height);
+      // Keeper Gloves
+      ctx.fillStyle = "#ffa502";
+      ctx.fillRect(-keeper.width / 2 - 10, -15, 12, 18);
+      ctx.fillRect(keeper.width / 2 - 2, -15, 12, 18);
+      ctx.restore();
+
+      // Draw Aiming Target
+      if (phase === 'AIMING') {
+        ctx.strokeStyle = "#ffdd59";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(aimX, 175, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Dotted line from ball to aim
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(ball.x, ball.y);
+        ctx.lineTo(aimX, 175);
+        ctx.stroke();

@@ -303,3 +303,17 @@
         ctx.moveTo(ball.x, ball.y);
         ctx.lineTo(aimX, 175);
         ctx.stroke();
+ctx.setLineDash([]);
+}
+// Draw Soccer Ball
+ctx.fillStyle = "white";
+ctx.beginPath();
+ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+ctx.fill();
+ctx.strokeStyle = "black";
+ctx.lineWidth = 2;
+ctx.stroke();
+update();
+requestAnimationFrame(draw);
+}
+draw();
